@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "imagecleaner"
+version = "0.1.0"
+description = "A unified Python library for automated image dataset cleaning and validation for machine learning applications."
+readme = "README.md"
+requires-python = ">=3.13"
+
+license = { text = "MIT" }
+
+authors = [
+    { name = "Sumit Palekar" }
+]
+
+keywords = [
+    "computer-vision",
+    "machine-learning",
+    "image-cleaning",
+    "image-validation",
+    "dataset-cleaning",
+    "opencv",
+    "python"
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries"
+]
+
+
+dependencies = [
+    "opencv-python>=4.12",
+    "numpy>=2.3",
+    "Pillow>=11.3",
+    "imagehash>=4.3",
+    "pandas>=2.3"
+]
+
+
+[project.optional-dependencies]
+
+dev = [
+    "pytest>=8.4",
+    "black>=25.1",
+    "ruff>=0.12"
+]
+
+
+[tool.black]
+line-length = 88
+
+
+[tool.ruff]
+line-length = 88
+
+
+[tool.pytest.ini_options]
+
+testpaths = [
+    "tests"
+]
