@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="smartclean",
         description=(
-            "SmartClean-AI image cleaning and quality analysis."
+            "SmartImageClean image cleaning and quality analysis."
         ),
     )
 

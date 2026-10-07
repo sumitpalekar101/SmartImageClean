@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "imagecleaner"
-version = "0.1.0"
-description = "A unified Python library for automated image dataset cleaning and validation for machine learning applications."
+name = "smartimageclean"
+version = "0.1.2"
+description = "A configurable Python library for automated image quality analysis, validation, standardization, and dataset cleaning."
 readme = "README.md"
 requires-python = ">=3.13"
 
@@ -21,8 +21,9 @@ keywords = [
     "machine-learning",
     "image-cleaning",
     "image-validation",
+    "image-standardization",
     "dataset-cleaning",
-    "opencv",
+    "image-quality",
     "python"
 ]
 
@@ -69,4 +70,14 @@ line-length = 88
 
 testpaths = [
     "tests"
+]
+[tool.setuptools.packages.find]
+include = ["imagecleaner*"]
+exclude = [
+    "tests*",
+    "datasets*",
+    "reports*",
+    "logs*",
+    "quarantine*",
+    "standardized*"
 ]
