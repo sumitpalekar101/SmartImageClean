@@ -1,131 +1,233 @@
 # SmartImageClean
 
-A configurable Python library for automated image quality analysis, validation, standardization, restoration, and dataset cleaning.
+**Clean, validate, standardize, and prepare image datasets with a simple Python API.**
 
 [![PyPI Version](https://img.shields.io/pypi/v/smartimageclean.svg)](https://pypi.org/project/smartimageclean/)
 [![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-26%20passed-brightgreen.svg)]()
 
-## Overview
+SmartImageClean is a configurable Python library for image quality analysis, validation, standardization, restoration, and dataset cleaning. It helps developers and ML practitioners find common image issues and prepare datasets through a reusable Python pipeline.
 
-SmartImageClean is a reusable and configurable Python library designed to analyze, validate, standardize, restore, and clean image datasets.
+## Why SmartImageClean?
 
-The library checks images for common quality and consistency problems such as low resolution, unsuitable brightness, blur, incorrect format, color mode mismatch, aspect-ratio mismatch, file-size limits, and duplicate images.
+Image datasets can contain images with inconsistent dimensions, formats, brightness, sharpness, aspect ratios, color modes, and file sizes. Checking these issues manually takes time.
 
-Instead of applying the same operation to every image, SmartImageClean first analyzes each image against configurable requirements and then makes a decision based on the analysis.
+SmartImageClean provides a workflow for analyzing images against configurable requirements, identifying images that need attention, standardizing them when possible, and reviewing the resulting analysis.
 
-## Problem Statement
+## Install
 
-Image datasets collected from different sources often contain images with different resolutions, formats, color modes, brightness levels, blur levels, aspect ratios, and file sizes.
+```bash
+python -m pip install smartimageclean
+```
 
-Manually checking and preparing these images is time-consuming and inconsistent.
+Upgrade to the latest published version:
 
-SmartImageClean provides an automated and configurable approach for analyzing image quality, identifying problems, standardizing images, and validating the processed results.
+```bash
+python -m pip install --upgrade smartimageclean
+```
 
-## Key Features
+- **PyPI package name:** `smartimageclean`
+- **Python import name:** `imagecleaner`
 
-- Recursive image dataset discovery
-- Image validation
-- Image metadata extraction
-- Blur and sharpness detection
-- Brightness analysis
-- Resolution and dimension checking
-- Duplicate detection
-- Similar-image detection
-- Image quality scoring
-- Configuration-based quality analysis
-- Rule-based decision engine
-- Image standardization
-- Image restoration
-- Automatic re-analysis after processing
-- Quarantine-based cleaning
-- Review reports
-- Command-line interface
-- Automated testing
-- Reusable Python API
+## Quick Start
+
+1. Put your images in a folder, for example `datasets/`.
+2. Install SmartImageClean.
+3. Create a Python file and run the pipeline:
+
+```python
+from imagecleaner import ImageCleanerPipeline
+
+pipeline = ImageCleanerPipeline("datasets")
+result = pipeline.process()
+```
+
+That's the basic integration: import the pipeline, point it to your dataset, and call `process()`.
+
+`process()` returns a structured result. The pipeline workflow is designed to analyze the dataset, standardize images that fail configured requirements, and re-analyze the standardized output. Exact behavior depends on the installed release and configuration.
 
 ## Workflow
 
 ```text
 Image Dataset
-      ↓
-Dataset Loading
-      ↓
-Validation
-      ↓
-Image Analysis
-      ↓
-Quality Checks
-      ↓
-Configuration Check
-      ↓
-Decision Engine
-      ↓
-   Acceptable?
-    ↙       ↘
-  YES        NO
-   ↓          ↓
- KEEP     STANDARDIZE
-              ↓
-         RE-ANALYZE
-              ↓
-        Final Result
-              ↓
-            Report
+     |
+     v
+Load and Validate Images
+     |
+     v
+Analyze Quality and Metadata
+     |
+     v
+Check Configured Requirements
+     |
+     v
+Decision
+  /       \
+Keep     Needs work
+             |
+             v
+       Standardize image
+             |
+             v
+         Re-analyze
+             |
+             v
+        Final results
+```
 
-            
----
+Typical checks include:
 
-### Section 6 — Architecture
+- Image dimensions and resolution
+- Brightness
+- Blur and sharpness
+- Image format and color mode
+- Aspect ratio and file size
+- Duplicate detection
+- Image quality score
 
-```markdown
-## Architecture
+Which checks run depends on the available settings and configuration.
 
-SmartImageClean follows a modular, configuration-driven architecture.
+## Configure the Pipeline
 
-```text
-                  IMAGE DATASET
-                       ↓
-                Dataset Loader
-                       ↓
-                   Validator
-                       ↓
-                Image Analysis
-                       ↓
-              Configuration Check
-                       ↓
-                Decision Engine
-                       ↓
-             ┌─────────┴─────────┐
-             ↓                   ↓
-            KEEP              REVIEW
-                                 ↓
-                           Standardization
-                                 ↓
-                            Re-analysis
-                                 ↓
-                            Final Result
-                                 ↓
-                               Report
+Use `configure()` to change supported validation requirements:
 
-                               
----
+```python
+from imagecleaner import ImageCleanerPipeline
 
-### Section 7 — Project Structure
+pipeline = ImageCleanerPipeline("datasets")
 
-```markdown
+pipeline.configure(
+    min_width=224,
+    min_height=224,
+    required_format="JPEG",
+    required_color_mode="RGB",
+)
+
+result = pipeline.process()
+```
+
+Configuration options supported by the pipeline implementation include:
+
+- `min_width`, `max_width`
+- `min_height`, `max_height`
+- `min_brightness`, `max_brightness`
+- `blur_threshold`
+- `min_quality_score`
+- `required_format`
+- `required_color_mode`
+- `required_aspect_ratio`
+- `max_file_size`
+- `check_duplicates`
+- `check_blur`
+- `check_resolution`
+- `check_brightness`
+
+Use values that fit your project and check the package configuration for accepted types, units, and valid ranges.
+
+## Main API
+
+| API | What it does |
+|---|---|
+| `ImageCleanerPipeline(...)` | Creates a pipeline for an image dataset |
+| `run()` | Runs dataset analysis and returns a result |
+| `process()` | Runs the processing workflow, including standardization and re-analysis where applicable |
+| `configure(**overrides)` | Updates supported validation settings |
+| `standardize(image_path, output_path)` | Standardizes an individual image |
+| `restore(image_path, output_path, ...)` | Applies supported image enhancement operations |
+| `settings` | Provides access to current pipeline settings |
+| `clean` | Provides the current cleaning setting |
+
+### Analyze without the processing workflow
+
+```python
+from imagecleaner import ImageCleanerPipeline
+
+pipeline = ImageCleanerPipeline("datasets")
+result = pipeline.run()
+```
+
+### Standardize an individual image
+
+```python
+pipeline.standardize(
+    image_path="datasets/photo.png",
+    output_path="standardized/photo.jpg",
+)
+```
+
+### Restore an image
+
+```python
+pipeline.restore(
+    image_path="datasets/photo.jpg",
+    output_path="restored/photo.jpg",
+    brightness=1.1,
+    contrast=1.1,
+    sharpness=1.2,
+    denoise=False,
+    upscale=1.0,
+)
+```
+
+Restoration options and output behavior depend on the installed implementation. Use a separate output path to help preserve the original image.
+
+## Understanding the Result
+
+`run()` and `process()` return a `PipelineResult`. Useful result properties include:
+
+| Property | Meaning |
+|---|---|
+| `total_images` | Number of images represented in the result |
+| `kept_count` | Images marked to be kept |
+| `review_count` | Images that need review |
+| `removal_count` | Removal candidates |
+| `duplicate_count` | Images identified as duplicates |
+| `acceptable_count` | Images satisfying the active configuration |
+| `unacceptable_count` | Images failing the active configuration |
+
+The result may also include a `processing` summary, with information such as initial counts and the number of standardized images. The final image count may differ from the original count because the final result can represent the re-analyzed standardized dataset.
+
+Supporting result classes in the pipeline include `PipelineImageResult`, `ImageAnalysis`, `ConfigurationAnalysis`, and `ProcessingSummary`.
+
+## Reports and Console Summary
+
+The project includes a review-report component. Report formats, output directory, filenames, and whether reports and summaries are generated automatically can vary by release and settings.
+
+Check the behavior of the version you install before relying on automatic TXT, CSV, or JSON report generation.
+
+## Command-Line Interface
+
+If the CLI is included in your installed version, view its available commands with:
+
+```bash
+python -m imagecleaner --help
+```
+
+The source project has documented commands for dataset analysis and processing. Confirm supported flags with the help output for your installed release.
+
+## Safety Notes
+
+- Test the pipeline on a copy of your dataset before using cleaning or quarantine features.
+- Review cleaning settings before running operations that move files.
+- Standardization cannot guarantee that every image will pass every quality check.
+- Keep backups of important source images.
+
+## Technology
+
+The project uses Python and image/data-processing tools such as Pillow, OpenCV, NumPy, ImageHash, and Pandas. The published package metadata defines the actual runtime requirements for each release.
+
+
 ## Project Structure
 
+The repository is organized into modules for the pipeline, configuration, detectors, reports, restoration, standardization, utilities, and validators. The exact file layout can change between releases.
+
 ```text
-SmartImageClean/
-│
+SmartClean-AI/
 ├── imagecleaner/
-│   ├── cleaner.py
-│   ├── cli.py
 │   ├── __init__.py
 │   ├── __main__.py
-│   │
+│   ├── cleaner.py
+│   ├── cli.py
 │   ├── config/
 │   ├── core/
 │   ├── detectors/
@@ -135,388 +237,30 @@ SmartImageClean/
 │   ├── standardization/
 │   ├── utils/
 │   └── validators/
-│
 ├── tests/
-│   ├── test_metadata.py
-│   ├── test_pipeline.py
-│   ├── test_validator.py
-│   ├── test_config.py
-│   ├── test_standardizer.py
-│   └── test_restorer.py
-│
-├── test_quality_diagnostic.py
 ├── README.md
 ├── pyproject.toml
-└── requirements.txt
-
-
----
-
-### Section 8 — Installation
-
-```markdown
-## Installation
-
-Install SmartImageClean directly from PyPI:
-
-```bash
-pip install smartimageclean
-
-After installation, the package can be imported using:
-
-import imagecleaner
-
-
----
-
-### Section 9 — Requirements
-
-```markdown
-## Requirements
-
-- Python 3.13+
-- Pillow
-- NumPy
-- OpenCV
-- ImageHash
-- Pandas
-
-Development and testing use:
-
-- pytest
-- Black
-- Ruff
-
-## Basic Python Usage
-
-```python
-from imagecleaner import ImageCleaner
-
-cleaner = ImageCleaner("datasets")
-
-result = cleaner.run()
-
-
----
-
-### Section 11 — Configuration
-
-```markdown
-## Configuration
-
-SmartImageClean allows users to configure image requirements according to their application.
-
-Example:
-
-```python
-cleaner.configure(
-    min_width=224,
-    min_height=224,
-    required_format="JPEG",
-    required_color_mode="RGB"
-)
-
-
----
-
-### Section 12 — Analysis
-
-```markdown
-## Image Analysis
-
-Analysis evaluates each image based on the active configuration requirements.
-
-The system can examine:
-
-- Image dimensions
-- Brightness
-- Blur/sharpness
-- Image format
-- Color mode
-- Aspect ratio
-- File size
-- Duplicate status
-- Quality score
-
-The analysis produces structured information that is passed to the decision engine.
-
-## Decision Engine
-
-The decision engine uses the analysis results to classify images.
-
-Typical decisions include:
-
-- **KEEP** — image satisfies the required conditions.
-- **REVIEW** — image has one or more issues that require further processing or manual inspection.
-- **REMOVE** — image is considered a removal candidate according to the cleaning rules.
-
-SmartImageClean is designed to avoid unsafe automatic deletion by preserving original files and using quarantine-based cleaning.
-
-## Decision Engine
-
-The decision engine uses the analysis results to classify images.
-
-Typical decisions include:
-
-- **KEEP** — image satisfies the required conditions.
-- **REVIEW** — image has one or more issues that require further processing or manual inspection.
-- **REMOVE** — image is considered a removal candidate according to the cleaning rules.
-
-SmartImageClean is designed to avoid unsafe automatic deletion by preserving original files and using quarantine-based cleaning.
-
-## Image Standardization
-
-Standardization converts images into a common predefined format and set of requirements so that they are consistent and suitable for a particular application.
-
-It can handle requirements such as:
-
-- Image format
-- Color mode
-- Width
-- Height
-- Aspect ratio
-- Orientation
-
-After standardization, the processed images can be analyzed again to verify whether they now satisfy the configured requirements.
-
-
-## Re-analysis
-
-SmartImageClean can automatically re-analyze standardized images.
-
-The workflow is:
-
-    Initial Analysis
-           ↓
-    Identify Unacceptable Images
-           ↓
-    Standardization
-           ↓
-    Re-analysis
-           ↓
-    Final Result
-
-This prevents the system from assuming that every transformed image has automatically become acceptable.
-
-If an image still fails a quality requirement after standardization, it can remain under review.
-
-
-## Image Restoration
-
-SmartImageClean also provides image restoration utilities for improving image quality.
-
-Supported operations include:
-
-- Brightness adjustment
-- Contrast enhancement
-- Sharpness enhancement
-- Denoising
-- Image upscaling
-
-Example:
-
-    from imagecleaner.restoration.restorer import ImageRestorer
-
-    restorer = ImageRestorer()
-
-    restorer.restore(
-        "input.jpg",
-        "output.jpg",
-        brightness=1.2,
-        contrast=1.1,
-        sharpness=1.3
-    )
-
-The original image is preserved while the restored image is written to a separate output path.
-
-
-## Command Line Interface
-
-SmartImageClean provides a command-line interface.
-
-Show help:
-
-    python -m imagecleaner --help
-
-Run normal analysis:
-
-    python -m imagecleaner "datasets"
-
-Run automatic processing:
-
-    python -m imagecleaner "datasets" --process
-
-The CLI supports options for processing, standardization, quarantine, and cleaning.
-
-
-## Reports
-
-SmartImageClean can generate reports containing information about image analysis and cleaning decisions.
-
-Reports can help users identify:
-
-- Total images processed
-- Acceptable images
-- Images requiring review
-- Removal candidates
-- Duplicate information
-- Quality-related problems
-- Processing results
-
-A review report can be generated in the project's `reports/` directory.
-
-
-## Safety Approach
-
-SmartImageClean follows a conservative cleaning approach.
-
-The system does not immediately delete original images during automatic processing.
-
-Instead, problematic images can be:
-
-1. Identified during analysis.
-2. Standardized when possible.
-3. Re-analyzed.
-4. Kept for review if problems remain.
-5. Moved to quarantine when cleaning is explicitly requested.
-
-This helps reduce accidental data loss.
-
-
-## Technology Stack
-
-| Technology |          Purpose                   |
-|------------|------------------------------------|                          
-| Python     | Core programming language          |
-| Pillow     | Image processing                   |
-| OpenCV     | Image analysis                     |
-| NumPy      | Numerical operations               |
-| ImageHash  | Duplicate and similarity detection |
-| Pandas     | Data handling                      |
-| pathlib    | File and directory handling        |
-| hashlib    | File hashing                       |
-| argparse   | Command-line interface             |
-| dataclasses| Structured results                 |
-| pytest     | Automated testing                  |
-
-
-## Testing
-
-The project includes automated tests for major components.
-
-Tested areas include:
-
-- Configuration
-- Image validation
-- Metadata extraction
-- Pipeline processing
-- Standardization
-- Restoration
-
-Current test result:
-
-    26 tests passed
-
-Run the tests using:
-
-    python -m pytest -q
-
-
-## Package Information
-
-**Package name:** `smartimageclean`
-
-**Current version:** `0.1.2`
-
-**PyPI installation:**
-
-    pip install smartimageclean
-
-**Python import:**
-
-    import imagecleaner
-
-**Main class:**
-
-    from imagecleaner import ImageCleaner
-
-SmartImageClean is distributed as a reusable Python package for image dataset quality analysis and preprocessing.
-
-
-## Development Status
-
-SmartImageClean is currently in the **Alpha** stage.
-
-The current release focuses on:
-
-- Image quality analysis
-- Configuration-based validation
-- Standardization
-- Restoration utilities
-- Dataset cleaning
-- Reporting
-- Automated testing
-- Command-line usage
-
-The library is designed to be extended with additional image-processing and AI-based capabilities in future versions.
-
+├── requirements.txt
+└── LICENSE
+```
 
 ## Future Scope
 
-Future versions may include:
-
-- AI-based image classification
-- Advanced image-quality assessment
-- Deep-learning-based restoration
-- More advanced duplicate detection
-- Dataset-specific profiles
-- Web-based user interface
-- Batch processing improvements
-- Cloud-based dataset processing
-- Additional image formats
-- Advanced visualization and analytics
-
-
-## Use Cases
-
-SmartImageClean can be used in:
-
-- Machine learning dataset preparation
-- Computer vision projects
-- Research image datasets
-- E-commerce product image processing
-- Photography platforms
-- Internal company image collections
-- Academic projects
-- Image preprocessing pipelines
-
-The library is designed to work with different image datasets rather than being limited to one specific application.
-
-
-## Design Principles
-
-SmartImageClean follows these design principles:
-
-- **Reusable** — designed as a Python library.
-- **Configurable** — image requirements can be customized.
-- **Modular** — different responsibilities are separated into modules.
-- **Safe** — original images are preserved during processing.
-- **Verifiable** — processed images can be re-analyzed.
-- **Extensible** — new detectors and processing methods can be added later.
-
+Potential future improvements include AI-based image classification, advanced image-quality assessment, deep-learning-based restoration, dataset-specific profiles, a web interface, improved batch processing, cloud processing, additional image formats, and advanced visualization.
 
 ## License
 
-This project is licensed under the MIT License.
-
-See the [LICENSE](LICENSE) file for details.
-
+SmartImageClean is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Author
 
 **Sumit Palekar**
-
 Creator and Maintainer of SmartImageClean
 
 - Email: sumitpalekar101@gmail.com
-- 💼 [LinkedIn](https://www.linkedin.com/in/sumit-palekar-450686252/)
+- LinkedIn: https://www.linkedin.com/in/sumit-palekar-450686252/
+
+## Links
+
+- [SmartImageClean on PyPI](https://pypi.org/project/smartimageclean/)
+- [GitHub repository](https://github.com/sumitpalekar101/SmartImageClean)

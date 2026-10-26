@@ -48,6 +48,8 @@ class CleaningSettings:
     check_resolution: bool = True
     check_brightness: bool = True
 
+    brightness_correction: bool = True
+
     def __post_init__(self) -> None:
         """Validate the configuration."""
         self._validate_dimensions()
@@ -239,17 +241,16 @@ class CleaningSettings:
             )
 
     def _validate_check_flags(self) -> None:
-        """Validate detector enable/disable flags."""
+        """Validate detector and correction enable/disable flags."""
         for name, value in (
-            ("check_duplicates", self.check_duplicates),
-            ("check_blur", self.check_blur),
-            ("check_resolution", self.check_resolution),
-            ("check_brightness", self.check_brightness),
-        ):
+        ("check_duplicates", self.check_duplicates),
+        ("check_blur", self.check_blur),
+        ("check_resolution", self.check_resolution),
+        ("check_brightness", self.check_brightness),
+        ("brightness_correction", self.brightness_correction),
+    ):
             if not isinstance(value, bool):
-                raise TypeError(
-                    f"{name} must be a boolean."
-                )
+                raise TypeError(f"{name} must be a boolean.")
 
 
 @dataclass(slots=True)

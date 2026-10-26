@@ -47,6 +47,9 @@ from imagecleaner.detectors.resolution_detector import (
     ResolutionDetector,
 )
 from imagecleaner.exceptions.custom_exceptions import ImageProcessingError
+from imagecleaner.standardization.brightness_corrector import (
+    correct_brightness,
+)
 from imagecleaner.reports.quality_score import (
     QualityScorer,
     QualityScoreResult,
@@ -97,11 +100,7 @@ class PipelineImageResult:
 
 @dataclass(frozen=True, slots=True)
 class ProcessingSummary:
-    """
-    Summary of automatic standardization processing.
-
-    This stores only the information required for the final report.
-    """
+    """Summary of automatic standardization processing."""
 
     initial_total: int
     initial_acceptable: int
@@ -176,8 +175,6 @@ class PipelineResult:
 # ================================================================
 # Main Pipeline
 # ================================================================
-
-
 class ImageCleanerPipeline:
     """Orchestrate the SmartClean-AI processing workflow."""
 
@@ -199,9 +196,7 @@ class ImageCleanerPipeline:
             settings: Optional SmartClean-AI configuration.
         """
         self._loader = DatasetLoader(dataset_path)
-
         self._settings = settings or ImageCleanerSettings()
-
         self._metadata_extractor = ImageMetadataExtractor()
 
         self._blur_detector = BlurDetector(
@@ -222,13 +217,10 @@ class ImageCleanerPipeline:
         self._quality_scorer = QualityScorer()
         self._decision_engine = CleaningDecisionEngine()
 
-        self._cleaner = ImageCleaner(
-            quarantine_directory
-        )
+        self._cleaner = ImageCleaner(quarantine_directory)
 
         self._standardizer = ImageStandardizer()
         self._restorer = ImageRestorer()
-
         self._clean = clean
 
         logger.info(
@@ -269,6 +261,7 @@ class ImageCleanerPipeline:
         Raises:
             ValueError: If an unknown setting is supplied.
         """
+    
         valid_fields = {
             "min_width",
             "max_width",
@@ -286,6 +279,7 @@ class ImageCleanerPipeline:
             "check_blur",
             "check_resolution",
             "check_brightness",
+            "brightness_correction",
         }
 
         unknown = set(overrides) - valid_fields
@@ -308,9 +302,7 @@ class ImageCleanerPipeline:
 
         self._refresh_detectors()
 
-        logger.info(
-            "SmartClean-AI configuration updated."
-        )
+        logger.info("SmartClean-AI configuration updated.")
 
         return self._settings
 
@@ -340,9 +332,25 @@ class ImageCleanerPipeline:
             upscale=upscale,
         )
 
+    
     # ============================================================
     # Standardization
     # ============================================================
+    
+    def correct_image_brightness(
+        self,
+        image_path: str | Path,
+        output_path: str | Path,
+    ) -> Path:
+        """Correct brightness when enabled in the active configuration."""
+
+        if not self._settings.cleaning.brightness_correction:
+            return Path(image_path)
+
+        return correct_brightness(
+            image_path,
+            output_path,
+        )
 
     def standardize(
         self,
@@ -378,9 +386,7 @@ class ImageCleanerPipeline:
         Raises:
             ImageProcessingError: If processing fails.
         """
-        logger.info(
-            "Starting SmartClean-AI pipeline."
-        )
+        logger.info("Starting SmartClean-AI pipeline.")
 
         dataset = self._loader.discover()
 
@@ -400,7 +406,6 @@ class ImageCleanerPipeline:
                     image=image,
                     duplicate_paths=duplicate_paths,
                 )
-
                 results.append(result)
 
             except ImageProcessingError:
@@ -430,6 +435,42 @@ class ImageCleanerPipeline:
 
         return pipeline_result
 
+            # ============================================================
+    # Report Generation
+    # ============================================================
+
+    def _generate_reports(self, result: PipelineResult) -> None:
+        """Generate text, CSV, and JSON reports automatically."""
+
+        # Local imports avoid a potential circular import.
+        from imagecleaner.reports.review_report import (
+            ReviewReportGenerator,
+        )
+        from imagecleaner.reports.report_generator import (
+            ReportGenerator,
+        )
+
+        output_settings = self._settings.output
+        report_directory = output_settings.output_directory
+
+        # Always generate the text report.
+        text_path = ReviewReportGenerator(
+            report_directory
+        ).generate(result)
+
+        logger.info("Text report generated: %s", text_path)
+
+        # Generate CSV and JSON reports when enabled.
+        report_generator = ReportGenerator(report_directory)
+
+        if output_settings.generate_csv_report:
+            csv_path = report_generator.generate_csv(result)
+            logger.info("CSV report generated: %s", csv_path)
+
+        if output_settings.generate_json_report:
+            json_path = report_generator.generate_json(result)
+            logger.info("JSON report generated: %s", json_path)
+
     # ============================================================
     # Automatic Processing
     # ============================================================
@@ -440,10 +481,11 @@ class ImageCleanerPipeline:
         standardized_directory: str | Path = "standardized",
     ) -> PipelineResult:
         """
-        Automatically standardize unacceptable images and re-analyze them.
+        Standardize unacceptable images and re-analyze them.
 
-        The original images are preserved. Standardized images are
-        written to a separate directory.
+        Original images are preserved. Standardized images are
+        written to a separate directory. Reports are generated
+        automatically before the result is returned.
         """
         if self._clean:
             raise ValueError(
@@ -455,16 +497,13 @@ class ImageCleanerPipeline:
             "Starting automatic SmartClean-AI processing."
         )
 
-        # --------------------------------------------------------
-        # Step 1: Initial analysis
-        # --------------------------------------------------------
-
+        # Step 1: Analyze the original dataset.
         initial_result = self.run()
 
-        standardized_directory = Path(
-            standardized_directory
-        )
+        standardized_directory = Path(standardized_directory)
 
+        
+        # Identify images that fail the configuration checks.
         unacceptable_images = [
             result.analysis.image
             for result in initial_result.images
@@ -474,49 +513,79 @@ class ImageCleanerPipeline:
             )
         ]
 
-        # --------------------------------------------------------
-        # Step 2: Nothing requires standardization
-        # --------------------------------------------------------
+        # When brightness correction is enabled, process every image.
+        if self._settings.cleaning.brightness_correction:
+            images_to_process = [
+                result.analysis.image
+                for result in initial_result.images
+            ]
+        else:
+            images_to_process = unacceptable_images
 
-        if not unacceptable_images:
+
+        
+        # Step 2: Return early only when there is nothing to process.
+        if not images_to_process:
             logger.info(
                 "All images already satisfy the active configuration."
             )
 
+            self._generate_reports(initial_result)
+            self._display_processing_results(initial_result)
             return initial_result
 
-        # --------------------------------------------------------
-        # Step 3: Standardize unacceptable images
-        # --------------------------------------------------------
-
-        for image in unacceptable_images:
+        # Step 3: Standardize images and optionally correct brightness.
+        for image in images_to_process:
             relative_path = image.path.relative_to(
                 self._loader.dataset_path
             )
 
-            output_path = (
-                standardized_directory / relative_path
-            )
+            # Use the configured output format for the filename.
+            required_format = self._settings.cleaning.required_format
 
-            self.standardize(
-                image.path,
-                output_path,
-            )
+            if required_format:
+                extension = (
+                    ".jpg"
+                    if required_format.upper() in {"JPG", "JPEG"}
+                    else f".{required_format.lower()}"
+                )
+                relative_path = relative_path.with_suffix(extension)
 
-        standardized_count = len(
-            unacceptable_images
-        )
+            output_path = standardized_directory / relative_path
 
-        logger.info(
-            "Standardization completed for %d image(s). "
-            "Re-analyzing standardized dataset.",
-            standardized_count,
-        )
+            try:
+                # Standardize first to preserve configured output requirements.
+                saved_path = self.standardize(
+                    image.path,
+                    output_path,
+                )
 
-        # --------------------------------------------------------
-        # Step 4: Re-analyze standardized images
-        # --------------------------------------------------------
+                # Apply brightness correction only when enabled.
+                if self._settings.cleaning.brightness_correction:
+                    corrected_path = output_path.with_name(
+                        f"{output_path.stem}_brightness_tmp"
+                        f"{output_path.suffix}"
+                    )
 
+                    self.correct_image_brightness(
+                        saved_path,
+                        corrected_path,
+                    )
+
+                    corrected_path.replace(output_path)
+                    saved_path = output_path
+
+            except (ValueError, ImageProcessingError) as exc:
+                logger.error(
+                    "Processing failed for %s: %s",
+                    image.path,
+                    exc,
+                )
+                raise
+
+            logger.info("Processed image saved: %s", saved_path)
+
+        # Step 4: Re-analyze the standardized images.
         final_pipeline = ImageCleanerPipeline(
             standardized_directory,
             quarantine_directory="quarantine",
@@ -526,10 +595,8 @@ class ImageCleanerPipeline:
 
         final_result = final_pipeline.run()
 
-        # --------------------------------------------------------
-        # Step 5: Store processing summary
-        # --------------------------------------------------------
-
+        # Step 5: Attach the original processing summary.
+        standardized_count = len(images_to_process)
         processing_summary = ProcessingSummary(
             initial_total=initial_result.total_images,
             initial_acceptable=initial_result.acceptable_count,
@@ -552,9 +619,13 @@ class ImageCleanerPipeline:
             final_result.unacceptable_count,
         )
 
-        return final_result
+        # Step 6: Generate reports automatically.
+        self._generate_reports(final_result)
 
-    # ============================================================
+        # Step 7: Display the final processing summary.
+        self._display_processing_results(final_result)
+
+        return final_result    # ============================================================
     # Single Image Processing
     # ============================================================
 
@@ -565,26 +636,12 @@ class ImageCleanerPipeline:
         duplicate_paths: set[Path],
     ) -> PipelineImageResult:
         """Process one image through the analysis pipeline."""
-        logger.debug(
-            "Processing image: %s",
-            image.path,
-        )
+        logger.debug("Processing image: %s", image.path)
 
-        metadata = self._metadata_extractor.extract(
-            image
-        )
-
-        blur_result = self._blur_detector.detect(
-            image
-        )
-
-        brightness_result = self._brightness_detector.detect(
-            image
-        )
-
-        resolution_result = self._resolution_detector.detect(
-            metadata
-        )
+        metadata = self._metadata_extractor.extract(image)
+        blur_result = self._blur_detector.detect(image)
+        brightness_result = self._brightness_detector.detect(image)
+        resolution_result = self._resolution_detector.detect(metadata)
 
         is_duplicate = image.path in duplicate_paths
 
@@ -624,9 +681,7 @@ class ImageCleanerPipeline:
         operation = None
 
         if self._clean:
-            operation = self._cleaner.execute(
-                decision
-            )
+            operation = self._cleaner.execute(decision)
 
         return PipelineImageResult(
             analysis=analysis,
@@ -646,18 +701,13 @@ class ImageCleanerPipeline:
         quality: QualityScoreResult,
         is_duplicate: bool,
     ) -> ConfigurationAnalysis:
-        """
-        Compare actual image properties with active configuration.
-        """
+        """Compare actual image properties with active settings."""
         settings = self._settings.cleaning
 
         checks: dict[str, bool] = {}
         reasons: list[str] = []
 
-        # --------------------------------------------------------
-        # Resolution checks
-        # --------------------------------------------------------
-
+        # Resolution checks.
         if settings.check_resolution:
             self._check_dimension(
                 checks=checks,
@@ -691,10 +741,7 @@ class ImageCleanerPipeline:
                 maximum=settings.max_height,
             )
 
-        # --------------------------------------------------------
-        # Brightness check
-        # --------------------------------------------------------
-
+        # Brightness checks.
         if settings.check_brightness:
             self._check_brightness(
                 checks=checks,
@@ -704,19 +751,12 @@ class ImageCleanerPipeline:
                 maximum=settings.max_brightness,
             )
 
-        # --------------------------------------------------------
-        # Blur / sharpness check
-        # --------------------------------------------------------
-
+        # Blur / sharpness check.
         if (
             settings.check_blur
             and settings.blur_threshold is not None
         ):
-            passed = (
-                blur.score
-                >= settings.blur_threshold
-            )
-
+            passed = blur.score >= settings.blur_threshold
             checks["blur_threshold"] = passed
 
             if not passed:
@@ -725,16 +765,19 @@ class ImageCleanerPipeline:
                     "blur/sharpness threshold."
                 )
 
-        # --------------------------------------------------------
-        # Format check
-        # --------------------------------------------------------
-
+        
+        # Image format check.
         if settings.required_format is not None:
-            passed = (
-                metadata.image_format.upper()
-                == settings.required_format.upper()
-            )
+            actual_format = metadata.image_format.upper()
+            required_format = settings.required_format.upper()
 
+            if actual_format == "JPG":
+                actual_format = "JPEG"
+
+            if required_format == "JPG":
+                required_format = "JPEG"
+
+            passed = actual_format == required_format
             checks["required_format"] = passed
 
             if not passed:
@@ -743,16 +786,13 @@ class ImageCleanerPipeline:
                     "required format."
                 )
 
-        # --------------------------------------------------------
-        # Color mode check
-        # --------------------------------------------------------
 
+        # Color mode check.
         if settings.required_color_mode is not None:
             passed = (
                 metadata.mode.upper()
                 == settings.required_color_mode.upper()
             )
-
             checks["required_color_mode"] = passed
 
             if not passed:
@@ -761,10 +801,7 @@ class ImageCleanerPipeline:
                     "the required color mode."
                 )
 
-        # --------------------------------------------------------
-        # Aspect ratio check
-        # --------------------------------------------------------
-
+        # Aspect ratio check.
         if settings.required_aspect_ratio is not None:
             passed = isclose(
                 metadata.aspect_ratio,
@@ -772,7 +809,6 @@ class ImageCleanerPipeline:
                 rel_tol=0.01,
                 abs_tol=0.01,
             )
-
             checks["required_aspect_ratio"] = passed
 
             if not passed:
@@ -781,48 +817,29 @@ class ImageCleanerPipeline:
                     "the required aspect ratio."
                 )
 
-        # --------------------------------------------------------
-        # File size check
-        # --------------------------------------------------------
-
+        # Maximum file size check.
         if settings.max_file_size is not None:
             passed = (
-                metadata.file_size_bytes
-                <= settings.max_file_size
+                metadata.file_size_bytes <= settings.max_file_size
             )
-
             checks["max_file_size"] = passed
 
             if not passed:
                 reasons.append(
-                    "Image file size exceeds the "
-                    "configured maximum."
+                    "Image file size exceeds the configured maximum."
                 )
 
-        # --------------------------------------------------------
-        # Duplicate check
-        # --------------------------------------------------------
-
+        # Duplicate check.
         if settings.check_duplicates:
             passed = not is_duplicate
-
             checks["duplicate_check"] = passed
 
             if not passed:
-                reasons.append(
-                    "Image is an exact duplicate."
-                )
+                reasons.append("Image is an exact duplicate.")
 
-        # --------------------------------------------------------
-        # Quality score check
-        # --------------------------------------------------------
-
+        # Minimum quality score check.
         if settings.min_quality_score is not None:
-            passed = (
-                quality.score
-                >= settings.min_quality_score
-            )
-
+            passed = quality.score >= settings.min_quality_score
             checks["min_quality_score"] = passed
 
             if not passed:
@@ -851,28 +868,26 @@ class ImageCleanerPipeline:
         minimum: int | None = None,
         maximum: int | None = None,
     ) -> None:
-        """Check one dimension against configured limits."""
+        """Check one image dimension against configured limits."""
 
         if minimum is not None:
             passed = value >= minimum
-
             checks[name] = passed
 
             if not passed:
                 reasons.append(
                     f"Image {name.removeprefix('min_')} "
-                    f"is below the configured minimum."
+                    "is below the configured minimum."
                 )
 
         if maximum is not None:
             passed = value <= maximum
-
             checks[name] = passed
 
             if not passed:
                 reasons.append(
                     f"Image {name.removeprefix('max_')} "
-                    f"exceeds the configured maximum."
+                    "exceeds the configured maximum."
                 )
 
     # ============================================================
@@ -888,11 +903,10 @@ class ImageCleanerPipeline:
         minimum: float | None,
         maximum: float | None,
     ) -> None:
-        """Check brightness against configured limits."""
+        """Check image brightness against configured limits."""
 
         if minimum is not None:
             passed = brightness >= minimum
-
             checks["min_brightness"] = passed
 
             if not passed:
@@ -903,7 +917,6 @@ class ImageCleanerPipeline:
 
         if maximum is not None:
             passed = brightness <= maximum
-
             checks["max_brightness"] = passed
 
             if not passed:
@@ -941,8 +954,7 @@ class ImageCleanerPipeline:
         """Return a valid blur detector threshold."""
         return (
             self._settings.cleaning.blur_threshold
-            if self._settings.cleaning.blur_threshold
-            is not None
+            if self._settings.cleaning.blur_threshold is not None
             else 0.0
         )
 
@@ -950,8 +962,7 @@ class ImageCleanerPipeline:
         """Return a valid detector brightness minimum."""
         return (
             self._settings.cleaning.min_brightness
-            if self._settings.cleaning.min_brightness
-            is not None
+            if self._settings.cleaning.min_brightness is not None
             else 0.0
         )
 
@@ -959,8 +970,7 @@ class ImageCleanerPipeline:
         """Return a valid detector brightness maximum."""
         return (
             self._settings.cleaning.max_brightness
-            if self._settings.cleaning.max_brightness
-            is not None
+            if self._settings.cleaning.max_brightness is not None
             else 255.0
         )
 
@@ -968,8 +978,7 @@ class ImageCleanerPipeline:
         """Return a valid detector minimum width."""
         return (
             self._settings.cleaning.min_width
-            if self._settings.cleaning.min_width
-            is not None
+            if self._settings.cleaning.min_width is not None
             else 1
         )
 
@@ -977,8 +986,7 @@ class ImageCleanerPipeline:
         """Return a valid detector minimum height."""
         return (
             self._settings.cleaning.min_height
-            if self._settings.cleaning.min_height
-            is not None
+            if self._settings.cleaning.min_height is not None
             else 1
         )
 
@@ -999,3 +1007,27 @@ class ImageCleanerPipeline:
                 duplicate_paths.add(image.path)
 
         return duplicate_paths
+    def _display_processing_results(
+        self,
+        result: PipelineResult,
+    ) -> None:
+        """Display a summary of the processing results."""
+
+        print("\n--- Processing Results ---")
+        print(f"Total images: {result.total_images}")
+        print(f"Kept: {result.kept_count}")
+        print(f"Needs review: {result.review_count}")
+        print(f"Removal candidates: {result.removal_count}")
+        print(f"Duplicates: {result.duplicate_count}")
+
+        if result.processing is not None:
+            print(
+                "Standardized images: "
+                f"{result.processing.standardized_count}"
+            )
+
+        print("\nProcessing completed.")
+        print(
+            "Reports output folder: "
+            f"{self._settings.output.output_directory}"
+        )

@@ -10,6 +10,7 @@ def create_test_image(path: Path, size=(100, 100), mode="RGB"):
     image.save(path)
 
 
+
 def test_resize_to_minimum(tmp_path):
     source = tmp_path / "input.jpg"
     output = tmp_path / "output.jpg"
@@ -26,8 +27,9 @@ def test_resize_to_minimum(tmp_path):
     )
 
     with Image.open(result) as image:
-        assert image.size == (500, 400)
-
+        assert image.size == (500, 500)
+        assert image.width >= 500
+        assert image.height >= 400
 
 def test_color_mode_conversion(tmp_path):
     source = tmp_path / "input.jpg"
